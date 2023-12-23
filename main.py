@@ -1,3 +1,12 @@
+import ipdb; ipdb.set_trace()
+from torch_geometric.data import Data, Dataset
+from torch_geometric.utils import negative_sampling, degree
+from torch_geometric.transforms import RandomLinkSplit
+import torch_geometric.transforms as T
+from torch_geometric.utils import (negative_sampling, add_self_loops,
+                                   train_test_split_edges)
+from ogb.linkproppred import PygLinkPropPredDataset
+
 import argparse
 from itertools import count
 from pathlib import Path
@@ -8,24 +17,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torch_geometric.utils import negative_sampling, degree
 
-import torch_geometric.transforms as T
-
-from ogb.linkproppred import PygLinkPropPredDataset
-
-# from logger import Logger
-
-from utils import get_dataset, do_edge_split, do_edge_split_with_ratio, do_edge_split_with_ratio_large
+from utils import get_dataset, do_edge_split, do_edge_split_with_ratio, do_edge_split_with_ratio_large, do_edge_split_with_ratio_large_induc
 from torch.nn import BCELoss, BCEWithLogitsLoss
 
 from models import MLP, GCN, SAGE, LinkPredictor, GAT, APPNP_model, JKNet
 from torch_sparse import SparseTensor
 from sklearn.metrics import *
 from os.path import exists
-
-from torch_geometric.data import Data, Dataset
-from torch_geometric.transforms import RandomLinkSplit
 
 import math
 
@@ -34,12 +33,12 @@ import json
 
 from Evaluator import *
 
-from torch_geometric.utils import (negative_sampling, add_self_loops,
-                                   train_test_split_edges)
+def train(model, predictor, data, split_edge, optimizer, batch_size, encoder_name, dataset, transductive):
 
-def train(model, predictor, data, split_edge, optimizer, batch_size, encoder_name, dataset):
-
-    edge_index = data.adj_t
+    if transductive == "transduc":
+        edge_index = data.adj_t
+    else:
+        edge_index = data.edge_index
 
     model.train()
     predictor.train()
@@ -55,7 +54,10 @@ def train(model, predictor, data, split_edge, optimizer, batch_size, encoder_nam
         if encoder_name == 'mlp':
             h = model(data.x, data=data)
         else:
-            h = model(data.x, data.adj_t, data)
+            if transductive == "transduc":
+                h = model(data.x, data.adj_t, data)
+            else:
+                h = model(data.x, data.edge_index, data)
 
         edge = pos_train_edge[perm].t()
 
@@ -82,14 +84,17 @@ def train(model, predictor, data, split_edge, optimizer, batch_size, encoder_nam
 
 
 @torch.no_grad()
-def test(model, predictor, data, split_edge, evaluator, batch_size, encoder_name, dataset, metric):
+def test(model, predictor, data, split_edge, evaluator, batch_size, encoder_name, dataset, metric, transductive):
     model.eval()
     predictor.eval()
 
     if encoder_name == 'mlp':
         h = model(data.x)
     else:
-        h = model(data.x, data.adj_t)
+        if transductive == "transduc":
+            h = model(data.x, data.adj_t)
+        else:
+            h = model(data.x, data.edge_index)
 
     results = 0.0
     sum = 0
@@ -235,21 +240,44 @@ def main():
                         choices=['duplicated', 'self_loop','self_loop_dropout','none'])
     parser.add_argument('--augment_times', type=int, default=1)
     parser.add_argument('--augment_nodes', type=str, default="cold") #cold, all
+    parser.add_argument('--transductive', type=str, default="transduc") #transduc, induc
+
+    #### inductive setting ####
+    parser.add_argument('--test_ratio', type=float, default=0.1)
+    parser.add_argument('--val_node_ratio', type=float, default=0.1)
+    parser.add_argument('--val_ratio', type=float, default=0.1)
+    parser.add_argument('--old_old_extra_ratio', type=float, default=0.1)
+
 
     args = parser.parse_args()
     print(args)
 
-    if args.datasets == "amazon-computers" or args.datasets == "amazon-photos":
-        args.val_rate=10
-        args.test_rate=40
-    elif args.datasets == "igb-tiny" or args.datasets == "igb-small":
-        args.val_rate=5
-        args.test_rate=10
-    else:
-        args.val_rate=10
-        args.test_rate=20
+    if args.transductive == "transduc":
+        if args.datasets == "amazon-computers" or args.datasets == "amazon-photos":
+            args.val_rate=10
+            args.test_rate=40
+        elif args.datasets == "igb-tiny" or args.datasets == "igb-small":
+            args.val_rate=5
+            args.test_rate=10
+        else:
+            args.val_rate=10
+            args.test_rate=20
 
-    saved_file_name =  Path(args.log_dir) / ("sp_augment_" + args.datasets + "-" + args.encoder + "-" + args.predictor + "-" + str(args.metric) + "-" + str(args.patience) + "-" + str(args.negative_samples) + "-" + str(args.augment) + "-" + str(args.augment_times) + "-" + str(args.augment_nodes) + "-" + str(int(time.time()*10000)) + ".txt")
+        saved_file_name =  Path(args.log_dir) / ("sp_augment_" + args.datasets + "-" + args.encoder + "-" + args.predictor + "-" + str(args.metric) + "-" + str(args.patience) + "-" + str(args.negative_samples) + "-" + str(args.augment) + "-" + str(args.augment_times) + "-" + str(args.augment_nodes) + "-" + str(int(time.time()*10000)) + ".txt")
+
+    else:
+        if args.datasets == "cora" or args.datasets == "citeseer":
+            args.test_ratio=0.1
+            args.val_node_ratio=0.1
+            args.val_ratio=0.1
+        else:
+            args.test_ratio=0.1
+            args.val_node_ratio=0.1
+            args.val_ratio=0.1
+        args.old_old_extra_ratio= 0.1 
+
+        saved_file_name =  Path(args.log_dir) / ("induc_sp_augment_" + args.datasets + "-" + args.encoder + "-" + args.predictor + "-" + str(args.metric) + "-" + str(args.patience) + "-" + str(args.negative_samples) + "-" + str(args.augment) + "-" + str(args.augment_times) + "-" + str(args.augment_nodes) + "-" + str(int(time.time()*10000)) + ".txt")
+
 
     file = open(saved_file_name, "a+")
     file.write(str(args) + "\n")
@@ -265,52 +293,71 @@ def main():
         dataset = get_dataset(args.dataset_dir, args.datasets)
         data = dataset[0]
 
-    split_edge_neg_path = Path(args.dataset_dir) / (args.datasets + "-" + str(args.val_rate) + "-" + str(args.test_rate) + "-" + str(args.negative_samples) + "neg.pkl")
-    if split_edge_neg_path.exists():
-        split_edge = torch.load(split_edge_neg_path)
-    else:
-        if args.datasets == "igb-tiny" or args.datasets == "igb-small":
-            split_edge = do_edge_split_with_ratio_large(data, val_ratio=args.val_rate/100.0, test_ratio=args.test_rate/100.0, negative_samples=args.negative_samples)
+    if args.transductive == "transduc":
+        split_edge_neg_path = Path(args.dataset_dir) / (args.datasets + "-" + str(args.val_rate) + "-" + str(args.test_rate) + "-" + str(args.negative_samples) + "neg.pkl")
+        if split_edge_neg_path.exists():
+            split_edge = torch.load(split_edge_neg_path)
         else:
-            split_edge = do_edge_split_with_ratio(data, val_ratio=args.val_rate/100.0, test_ratio=args.test_rate/100.0, negative_samples=args.negative_samples)
-        torch.save(split_edge, split_edge_neg_path)
+            if args.datasets == "igb-tiny" or args.datasets == "igb-small":
+                split_edge = do_edge_split_with_ratio_large(data, val_ratio=args.val_rate/100.0, test_ratio=args.test_rate/100.0, negative_samples=args.negative_samples)
+            else:
+                split_edge = do_edge_split_with_ratio(data, val_ratio=args.val_rate/100.0, test_ratio=args.test_rate/100.0, negative_samples=args.negative_samples)
+            torch.save(split_edge, split_edge_neg_path)
 
-    split_edge["full_train"] = split_edge['train']['edge']
+        split_edge["full_train"] = split_edge['train']['edge']
 
-    import json
-    split_edge_degree = Path(args.dataset_dir) / (args.datasets + "-" + str(args.val_rate) + "-" + str(args.test_rate) + "-" + str(args.negative_samples) + "_edge_dict.json")
-    if split_edge_degree.exists():
+        import json
+        split_edge_degree = Path(args.dataset_dir) / (args.datasets + "-" + str(args.val_rate) + "-" + str(args.test_rate) + "-" + str(args.negative_samples) + "_edge_dict.json")
+        if split_edge_degree.exists():
+            file = open(split_edge_degree, "r")
+            edge_dict = json.load(file)
+            file.close()
+        else:
+            data.train_pos_edge_index = split_edge['train']['edge'].t()
+            data.val_pos_edge_index = split_edge['valid']['edge'].t()
+            data.test_pos_edge_index = split_edge['test']['edge'].t()
+
+            #### Calculate the node degree
+            neighbor_pos = torch.cat((data.train_pos_edge_index, data.val_pos_edge_index), dim=1)
+            neighbor_index = {}
+            row, col = neighbor_pos
+            for i in range(row.size(0)):
+                if row[i].item() in neighbor_index:
+                    neighbor_index[row[i].item()].append(col[i].item())
+                else:
+                    neighbor_index[row[i].item()] = [col[i].item()]
+                if col[i].item() in neighbor_index:
+                    neighbor_index[col[i].item()].append(row[i].item())
+                else:
+                    neighbor_index[col[i].item()] = [row[i].item()] 
+
+            edge_dict = {}
+            for key in neighbor_index:
+                edge_dict[str(key)] = len(list(set(neighbor_index[key])))
+
+            file = open(split_edge_degree, "w")
+            file.write(json.dumps(edge_dict))
+            file.close()
+
+        data, split_edge = data_augmentation(data, split_edge, args.augment, args.coldupline, args.augment_times, args.augment_nodes)
+
+    else:
+        split_edge_neg_path = Path(args.dataset_dir) / (args.datasets + "-" + str(args.test_ratio * 10) + "-" + str(args.val_node_ratio*10) + "-" + str(args.val_ratio*10) + "-" + str(args.old_old_extra_ratio*10) + "-" + str(args.negative_samples) + "neg-induc.pkl")
+        if split_edge_neg_path.exists(): 
+            training_data, inference_data, split_edge = torch.load(split_edge_neg_path)
+        else:
+            training_data, inference_data, split_edge = do_edge_split_with_ratio_large_induc(data, args.datasets, args.test_ratio, args.val_node_ratio, args.val_ratio, args.old_old_extra_ratio, negative_samples=args.negative_samples)
+            torch.save((training_data, inference_data, split_edge), split_edge_neg_path)
+
+        split_edge["full_train"] = split_edge['train']['edge']
+
+        import json
+        split_edge_degree = Path(args.dataset_dir) / (args.datasets + "-" + str(args.test_ratio * 10) + "-" + str(args.val_node_ratio*10) + "-" + str(args.val_ratio*10) + "-" + str(args.old_old_extra_ratio*10) + "-" + str(args.negative_samples) + "neg-induc_dict.json")
         file = open(split_edge_degree, "r")
         edge_dict = json.load(file)
         file.close()
-    else:
-        data.train_pos_edge_index = split_edge['train']['edge'].t()
-        data.val_pos_edge_index = split_edge['valid']['edge'].t()
-        data.test_pos_edge_index = split_edge['test']['edge'].t()
 
-        #### Calculate the node degree
-        neighbor_pos = torch.cat((data.train_pos_edge_index, data.val_pos_edge_index), dim=1)
-        neighbor_index = {}
-        row, col = neighbor_pos
-        for i in range(row.size(0)):
-            if row[i].item() in neighbor_index:
-                neighbor_index[row[i].item()].append(col[i].item())
-            else:
-                neighbor_index[row[i].item()] = [col[i].item()]
-            if col[i].item() in neighbor_index:
-                neighbor_index[col[i].item()].append(row[i].item())
-            else:
-                neighbor_index[col[i].item()] = [row[i].item()] 
-
-        edge_dict = {}
-        for key in neighbor_index:
-            edge_dict[str(key)] = len(list(set(neighbor_index[key])))
-
-        file = open(split_edge_degree, "w")
-        file.write(json.dumps(edge_dict))
-        file.close()
-
-    data, split_edge = data_augmentation(data, split_edge, args.augment, args.coldupline, args.augment_times, args.augment_nodes)
+        training_data, split_edge = data_augmentation(training_data, split_edge, args.augment, args.coldupline, args.augment_times, args.augment_nodes)
     
     # concat valid and test edges:
     pos = []
@@ -344,23 +391,30 @@ def main():
     split_edge['test']["split_neg"] = split_neg
 
     edge_index = split_edge['train']['edge'].t()
-    data.adj_t = edge_index
     input_size = data.x.size()[1]
 
-    # Use training + validation edges for inference on test set.
-    if args.use_valedges_as_input:
-        from torch_geometric.utils import undirected
-        val_edge_index = undirected.to_undirected(split_edge['valid']['edge'].t())
-        full_edge_index = torch.cat([edge_index, val_edge_index], dim=-1)
-        if args.datasets != "collab" and args.datasets != "ppa":
-            data.full_adj_t = full_edge_index
-        elif args.datasets == "collab" or args.datasets == "ppa":
-            data.full_adj_t = SparseTensor.from_edge_index(full_edge_index).t()
-            data.full_adj_t = data.full_adj_t.to_symmetric()
-    else:
-        data.full_adj_t = data.adj_t
+    if args.transductive == "transduc":
+        data.adj_t = edge_index
+        # Use training + validation edges for inference on test set.
+        if args.use_valedges_as_input:
+            from torch_geometric.utils import undirected
+            val_edge_index = undirected.to_undirected(split_edge['valid']['edge'].t())
+            full_edge_index = torch.cat([edge_index, val_edge_index], dim=-1)
+            if args.datasets != "collab" and args.datasets != "ppa":
+                data.full_adj_t = full_edge_index
+            elif args.datasets == "collab" or args.datasets == "ppa":
+                data.full_adj_t = SparseTensor.from_edge_index(full_edge_index).t()
+                data.full_adj_t = data.full_adj_t.to_symmetric()
+        else:
+            data.full_adj_t = data.adj_t
 
-    data = data.to(device)
+        data = data.to(device)
+
+    else:
+        training_data = training_data.to(device)
+        inference_data = inference_data.to(device)
+
+    
 
     if args.encoder == 'sage':
         model = SAGE(args.datasets, input_size, args.hidden_channels,
@@ -404,13 +458,20 @@ def main():
         cnt_wait = 0
         best_val = 0.0
         for epoch in range(1, 1 + args.epochs):
+            if args.transductive == "transduc":
+                loss = train(model, predictor, data, split_edge,
+                            optimizer, args.batch_size, args.encoder, args.datasets, args.transductive)
 
-            loss = train(model, predictor, data, split_edge,
-                         optimizer, args.batch_size, args.encoder, args.datasets)
+                results = test(model, predictor, data, split_edge,
+                                evaluator, args.batch_size, args.encoder, args.datasets, args.metric, args.transductive)
+            else:
+                loss = train(model, predictor, training_data, split_edge,
+                         optimizer, args.batch_size, args.encoder, args.datasets, args.transductive)
 
-            results = test(model, predictor, data, split_edge,
-                            evaluator, args.batch_size, args.encoder, args.datasets, args.metric)
-            
+                results = test(model, predictor, training_data, split_edge,
+                                evaluator, args.batch_size, args.encoder, args.datasets, args.metric, args.transductive)
+                
+                
             print(results)
             if results > best_val:
                 best_val = results
@@ -429,11 +490,19 @@ def main():
         model.eval()
         predictor.eval()
 
-        with torch.no_grad():
-            if args.encoder == 'mlp':
-                h = model(data.x)
-            else:
-                h = model(data.x, data.full_adj_t)
+        if args.transductive == "transduc":
+            with torch.no_grad():
+                if args.encoder == 'mlp':
+                    h = model(data.x)
+                else:
+                    h = model(data.x, data.full_adj_t)
+        else:
+            with torch.no_grad():
+                if args.encoder == 'mlp':
+                    h = model(inference_data.x)
+                else:
+                    h = model(inference_data.x, inference_data.edge_index)
+
 
         # hits_results = 0.0
         # hits_len = 0
