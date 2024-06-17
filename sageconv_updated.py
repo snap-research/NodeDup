@@ -8,6 +8,9 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.dense.linear import Linear
 
 
+# Note: SAGEConv first performs aggregation and then applies linear transformation, which is not memory efficient for datasets with high-dimensional original features (like coauthor-physics). 
+#     So we manually create SAGEConv_updated, which first applies linear transformation and then performs aggregation.
+
 class Sage_conv(MessagePassing):
     r"""The GraphSAGE operator from the `"Inductive Representation Learning on
     Large Graphs" <https://arxiv.org/abs/1706.02216>`_ paper

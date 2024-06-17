@@ -1,5 +1,8 @@
 import argparse, dgl
 from igb.dataloader import IGB260MDGLDataset
+import torch
+from torch_geometric.data import Data
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str, default='../IGB-Datasets', help='path containing the datasets')
 parser.add_argument('--dataset_size', type=str, default='tiny',choices=['tiny', 'small', 'medium', 'large', 'full'], help='size of the datasets')
@@ -10,10 +13,8 @@ args = parser.parse_args()
 dataset = IGB260MDGLDataset(args)
 dgl_graph = dataset[0]
 node_features = dgl_graph.ndata['feat']
-import torch
 node_features = torch.tensor(node_features)
 edges = dgl_graph.edges()
 edge_index = torch.stack(edges).long()
-from torch_geometric.data import Data
 torch_graph = Data(x=node_features, edge_index=edge_index)
 torch.save(torch_graph, "./igb-tiny.pkl")

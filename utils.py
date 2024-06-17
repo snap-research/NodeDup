@@ -1,17 +1,17 @@
 import random
-
 import numpy as np
 import torch
-from torch_geometric.utils import (negative_sampling, add_self_loops,
-                                   train_test_split_edges)
+import json
 
 from torch_geometric.transforms import NormalizeFeatures, Compose, BaseTransform, ToDevice
-
 import math
 
 from torch_geometric import datasets
-import random
-
+from torch_geometric.utils.undirected import to_undirected
+from torch_geometric.transforms import RandomLinkSplit, RandomNodeSplit
+from torch_geometric.utils import subgraph
+from torch_geometric.data import Data, Dataset
+from torch_geometric.utils import (negative_sampling, add_self_loops, train_test_split_edges, to_networkx, subgraph)
 
 def get_dataset(root, name: str):
     if name.startswith('ogbl-'):
@@ -278,8 +278,6 @@ def do_edge_split_with_ratio(data, fast_split=False, val_ratio=0.05, test_ratio=
     return split_edge
 
 def maually_split(data, val_ratio, test_ratio):
-    from torch_geometric.utils.undirected import to_undirected
-
     num_nodes = data.num_nodes
     row, col = data.edge_index
     edge_attr = data.edge_attr
@@ -453,9 +451,7 @@ def create_mask(base_mask, rows, cols):
 def split_edge_inductive(data, negative_sample_num):
     random.seed(234)
     torch.manual_seed(234)
-    from torch_geometric.transforms import RandomLinkSplit, RandomNodeSplit
-    from torch_geometric.utils import subgraph
-    from torch_geometric.data import Data
+
     node_splitter = RandomNodeSplit(num_val=0.0, num_test=0.1)
     new_data = node_splitter(data)
 
@@ -529,7 +525,6 @@ def split_edge_inductive(data, negative_sample_num):
     training_only_ei = subgraph(new_data.train_mask, old_old_ei, relabel_nodes=True)[0]
     training_only_x = new_data.x[new_data.train_mask]
     
-    from torch_geometric.data import Data, Dataset
     given_data = Data(training_only_x, training_only_ei)
     val_splitter = RandomLinkSplit(0.0, 0.1, is_undirected=True)
     training_data, _, val_data = val_splitter(given_data)
@@ -602,18 +597,6 @@ def do_edge_split_with_ratio_large_induc(data, data_name, test_ratio, val_node_r
     # Seed our RNG
     random.seed(split_seed)
     torch.manual_seed(split_seed) 
-
-    from torch_geometric.transforms import RandomLinkSplit, RandomNodeSplit
-    from torch_geometric.utils import (negative_sampling, add_self_loops, train_test_split_edges, to_networkx, subgraph)
-    from torch_geometric.data import Data, Dataset
-
-    # Assume we only have 1 graph in our dataset
-    # assert(len(dataset) == 1)
-    # data = dataset[0]
-
-    # Some assertions to help with type inference
-    # assert(isinstance(data, Data))
-    # assert(data.num_nodes is not None)
 
     split_edge = {}
     split_edge['train'] = {}
@@ -795,7 +778,6 @@ def do_edge_split_with_ratio_large_induc(data, data_name, test_ratio, val_node_r
     for key in neighbor_index:
         edge_dict[str(key)] = len(list(set(neighbor_index[key])))
 
-    import json
     file = open(split_edge_degree, "w")
     file.write(json.dumps(edge_dict))
     file.close()

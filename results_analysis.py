@@ -1,6 +1,7 @@
 #### Preanalysis the node degree results
 import json
 import torch
+import math
 
 def node_degree_results(edge_dict, results, test_hits, test_mrr, split_edge, node):
     if str(node) in edge_dict:
@@ -112,7 +113,6 @@ def result_coldwarm(results, split_num):
     return log_results
 
 def result_log(results):
-    import math
     log_results = {}
     hits_list = [f'hits@{K}' for K in [10,20,30,50]]
     for this_count in results:
@@ -224,10 +224,6 @@ def save_results(file, all_results, overall_results):
         print(print_out_str+"\n")
         file.write(print_out_str+"\n")
 
-        # this_res_hits = torch.tensor(all_results[key]['hits'])
-        # this_res_mrr = torch.tensor(all_results[key]['mrr'])
-        # print(str(key) + ", " + str(all_results[key]["node_num"]) + ", " + str(all_results[key]["edge_num"]) + f', hits@10: ' + f'{this_res_hits.mean():.2f} ± {this_res_hits.std():.2f}' + ", mrr: " + f'{this_res_mrr.mean():.2f} ± {this_res_mrr.std():.2f}' + "\n")
-        # file.write(str(key) + ", " + str(all_results[key]["node_num"]) + ", " + str(all_results[key]["edge_num"]) + f', hits@10: ' + f'{this_res_hits.mean():.2f} ± {this_res_hits.std():.2f}' + ", mrr: " + f'{this_res_mrr.mean():.2f} ± {this_res_mrr.std():.2f}' + "\n")
     print_out_str = "Overall, " + str(overall_results["node_num"]) + ", " + str(overall_results["edge_num"])
     for this_K in [10,20,30,50]:
         this_res_hits = torch.tensor(overall_results[f'hits@{this_K}'])
@@ -239,26 +235,5 @@ def save_results(file, all_results, overall_results):
     print(print_out_str+"\n")
     file.write(print_out_str+"\n")
 
-    # this_res_hits = torch.tensor(overall_results['hits'])
-    # this_res_mrr = torch.tensor(overall_results['mrr'])
-    # print("Overall, " + str(overall_results["node_num"]) + ", " + str(overall_results["edge_num"]) + f', hits@10: ' + f'{this_res_hits.mean():.2f} ± {this_res_hits.std():.2f}' + ", mrr: " + f'{this_res_mrr.mean():.2f} ± {this_res_mrr.std():.2f}' + "\n")
-    # file.write("Overall, " + str(overall_results["node_num"]) + ", " + str(overall_results["edge_num"]) + f', hits@10: ' + f'{this_res_hits.mean():.2f} ± {this_res_hits.std():.2f}' + ", mrr: " + f'{this_res_mrr.mean():.2f} ± {this_res_mrr.std():.2f}' + "\n\n")
-
-
-if __name__ == "__main__":
-    dataset = "cora"
-    max_degree = 11
-
-    file = open("results/sp_" + dataset + "-gcn-10-10.json", "r")
-    these_results = json.load(file)
-    file.close()
-
-    split_num = 2
-    file = open("results_test.txt", "a")
-    all_results, overall_results = sp_results_coldwarm(these_results, split_num)
-    save_results(file, all_results, overall_results)
-    all_results, overall_results = sp_results_log(these_results)
-    save_results(file, all_results, overall_results)
-    file.close()
 
    

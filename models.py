@@ -1,11 +1,9 @@
 import torch
 import torch.nn as nn
 
-# from torch_geometric.nn import GCNConv, SAGEConv, GATConv, APPNP
 from torch_geometric.nn import SAGEConv, GATConv, APPNP, GCNConv
 import torch.nn.functional as F
-from Conv import Sage_conv
-# from gcnconv import GCNConv
+from sageconv_updated import Sage_conv
 
 import torch.nn.utils.prune as prune
 
@@ -98,7 +96,6 @@ class GCN(torch.nn.Module):
     def forward(self, x, adj_t, data=None):
         iso_p, cold_p, warm_p = dropout_p(self.dropout)
         for conv in self.convs[:-1]:
-            # import ipdb; ipdb.set_trace()
             x = conv(x, adj_t)
             x = F.relu(x)
             if self.cold_dropout:
@@ -107,7 +104,6 @@ class GCN(torch.nn.Module):
                     x_cold = x[data.COLD_mask]
                     x_warm = x[data.WARM_mask]
                     x = x.new_empty(x.size())
-                    # assert x_iso.size(0) + x_cold.size(0) + x_warm.size(0) == x.size(0)
                     x_iso = F.dropout(x_iso, p=iso_p, training=self.training)
                     x_cold = F.dropout(x_cold, p=cold_p, training=self.training)
                     x_warm = F.dropout(x_warm, p=warm_p, training=self.training)

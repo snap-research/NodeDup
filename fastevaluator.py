@@ -4,32 +4,17 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-try:
-    import torch
-except ImportError:
-    torch = None
+import torch
 
 from fastauc.fastauc.fast_auc import fast_numba_auc_nonw
 
 ### Evaluator for link property prediction
 class Evaluator:
     def __init__(self):
-        # self.name = name
-
-        # meta_info = pd.read_csv(os.path.join(os.path.dirname(__file__), 'master.csv'), index_col = 0)
-        # if not self.name in meta_info:
-        #     print(self.name)
-        #     error_mssg = 'Invalid dataset name {}.\n'.format(self.name)
-        #     error_mssg += 'Available datasets are as follows:\n'
-        #     error_mssg += '\n'.join(meta_info.keys())
-        #     raise ValueError(error_mssg)
 
         self.eval_metric = 'mrr'
-        # self.AUC = CppAuc()
 
         if 'hits@' in self.eval_metric:
-            ### Hits@K
-
             self.K = int(self.eval_metric.split('@')[1])
 
 
@@ -148,24 +133,12 @@ class Evaluator:
             raise ValueError('Undefined eval metric %s' % (self.eval_metric))
 
 
-    def eval(self, input_dict, metric, valid=False):
+    def eval(self, input_dict, metric, validation=False):
         y_pred_pos, y_pred_neg, type_info = self._parse_and_check_input(input_dict)
-        if valid:
+        if validation:
             return self._eval_mrr_valid(y_pred_pos, y_pred_neg, type_info, metric)   
         else:
             return self._eval_mrr(y_pred_pos, y_pred_neg, type_info)
-
-        # if 'hits@' in self.eval_metric:
-        #     y_pred_pos, y_pred_neg, type_info = self._parse_and_check_input(input_dict)
-        #     return self._eval_hits(y_pred_pos, y_pred_neg, type_info)
-        # elif self.eval_metric == 'mrr':
-        #     y_pred_pos, y_pred_neg, type_info = self._parse_and_check_input(input_dict)
-        #     return self._eval_mrr(y_pred_pos, y_pred_neg, type_info)
-        # elif self.eval_metric == 'rocauc':
-        #     y_pred_pos, y_pred_neg, type_info = self._parse_and_check_input(input_dict)
-        #     return self._eval_rocauc(y_pred_pos, y_pred_neg, type_info)
-        # else:
-        #     raise ValueError('Undefined eval metric %s' % (self.eval_metric))
 
     @property
     def expected_input_format(self):
@@ -257,11 +230,7 @@ class Evaluator:
         # ~> the positive is ranked last among those with equal score
         pessimistic_rank = (y_pred_neg >= y_pred_pos).sum(dim=1)
         ranking_list = 0.5 * (optimistic_rank + pessimistic_rank) + 1
-        # hits10_list = (ranking_list <= 10).to(torch.float)
-        # hits20_list = (ranking_list <= 20).to(torch.float)
-        # hits30_list = (ranking_list <= 30).to(torch.float)
-        # hits50_list = (ranking_list <= 50).to(torch.float)
-        # mrr_list = 1./ranking_list.to(torch.float)
+
         if "hits@" in metric:
             K = int(metric[5:])
             result = (ranking_list <= K).to(torch.float)
@@ -363,27 +332,4 @@ if __name__ == '__main__':
     result = evaluator.eval(input_dict)
     print(result)
 
-    # torch.manual_seed(0)
-    # np.random.seed(0)
-    # evaluator = Evaluator(name = 'ogbl-wikikg2')
-    # print(evaluator.expected_input_format)
-    # print(evaluator.expected_output_format)
-    # # y_true = np.random.randint(2, size = (100,))
-    # y_pred_pos = torch.tensor(np.random.randn(1000,))
-    # y_pred_neg = torch.tensor(np.random.randn(1000,100))
-    # input_dict = {'y_pred_pos': y_pred_pos, 'y_pred_neg': y_pred_neg}
-    # result = evaluator.eval(input_dict)
-    # print(result['hits@1_list'].mean())
-    # print(result['hits@3_list'].mean())
-    # print(result['hits@10_list'].mean())
-    # print(result['mrr_list'].mean())
-
-    # y_pred_pos = y_pred_pos.numpy()
-    # y_pred_neg = y_pred_neg.numpy()
-    # input_dict = {'y_pred_pos': y_pred_pos, 'y_pred_neg': y_pred_neg}
-    # result = evaluator.eval(input_dict)
-    # print(result['hits@1_list'].mean())
-    # print(result['hits@3_list'].mean())
-    # print(result['hits@10_list'].mean())
-    # print(result['mrr_list'].mean())
 
