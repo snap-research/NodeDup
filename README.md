@@ -1,5 +1,8 @@
 # Node Duplication Improves Cold-start Link Prediction
 
+## Introduction
+This repository contains the source code for the paper: [Node Duplication Improves Cold-start Link Prediction](https://arxiv.org/pdf/2402.09711) 
+
 ## Requirements
 The code was developed and tested with Python 3.10.9. The enviromental requirements are listed as in `requirements.txt`. Please run the following code to install all the requirements:
 ```
