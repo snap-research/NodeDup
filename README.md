@@ -41,5 +41,15 @@ Please run the following command to reproduce the results in Table 2 and Table 7
 ```
 bash scripts/inductive.sh
 ```
+## Citation
+If you use this code in your research, please cite the following paper:
 
+```bibtex
+@article{guo2024node,
+  title={Node Duplication Improves Cold-start Link Prediction},
+  author={Guo, Zhichun and Zhao, Tong and Liu, Yozen and Dong, Kaiwen and Shiao, William and Shah, Neil and Chawla, Nitesh V},
+  journal={arXiv preprint arXiv:2402.09711},
+  year={2024}
+}
+}
 
